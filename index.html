@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Grok in Your Tesla</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e7e9ea;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      color: #1d9bf0;
+      margin-bottom: 4px;
+    }
+    header p {
+      font-size: 0.85rem;
+      color: #71767b;
+    }
+    .chat-container {
+      width: 100%;
+      max-width: 600px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px 0;
+    }
+    .message {
+      padding: 12px 16px;
+      border-radius: 16px;
+      max-width: 85%;
+      word-wrap: break-word;
+      line-height: 1.5;
+    }
+    .message.user {
+      background: #1d9bf0;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .message.grok {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .message.grok h1, .message.grok h2, .message.grok h3 {
+      margin: 12px 0 6px;
+      color: #1d9bf0;
+    }
+    .message.grok h1 { font-size: 1.2rem; }
+    .message.grok h2 { font-size: 1.1rem; }
+    .message.grok h3 { font-size: 1rem; }
+    .message.grok code {
+      background: #0d0d0d;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.85em;
+    }
+    .message.grok pre {
+      background: #0d0d0d;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .message.grok pre code {
+      background: none;
+      padding: 0;
+    }
+    .message.grok ul, .message.grok ol {
+      margin: 8px 0 8px 20px;
+    }
+    .message.grok a {
+      color: #1d9bf0;
+    }
+    .input-area {
+      display: flex;
+      gap: 8px;
+      padding: 12px 0;
+    }
+    .input-area input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 24px;
+      border: 1px solid #2a2a2a;
+      background: #1a1a1a;
+      color: #e7e9ea;
+      font-size: 1rem;
+      outline: none;
+    }
+    .input-area input:focus {
+      border-color: #1d9bf0;
+    }
+    .input-area button {
+      padding: 12px 20px;
+      border-radius: 24px;
+      border: none;
+      background: #1d9bf0;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .input-area button:active {
+      background: #1a8cd8;
+    }
+    .status {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #71767b;
+      padding: 4px;
+    }
+    .status.online { color: #00ba7c; }
+    .status.offline { color: #f4212e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Grok</h1>
+    <p>Talk to Grok, right here in your Tesla</p>
+  </header>
+  <div class="chat-container">
+    <div class="messages" id="messages">
+      <div class="message grok">
+        <p>Hey there! I'm Grok. Ask me anything — I can answer questions, explain code, help you plan, or just chat. What can I do for you?</p>
+      </div>
+    </div>
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="Type your message..." autocomplete="off">
+      <button id="sendBtn">Send</button>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+  </div>
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const statusEl = document.getElementById('status');
+
+    // Simple Markdown renderer (no external dependencies)
+    function renderMarkdown(text) {
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+        .replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function addMessage(text, sender) {
+      const div = document.createElement('div');
+      div.className = 'message ' + sender;
+      if (sender === 'grok') {
+        div.innerHTML = renderMarkdown(text);
+      } else {
+        div.textContent = text;
+      }
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = 'status ' + (type || '');
+    }
+
+    // Placeholder for Grok API integration
+    // In production, this would call the Grok API endpoint
+    async function sendToGrok(message) {
+      // TODO: Replace with actual Grok API call
+      // For now, echo back a demo response
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve('This is a demo response. In production, this would be a real Grok API call. Your message was: "' + message + '"');
+        }, 800);
+      });
+    }
+
+    async function handleSend() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+      addMessage(text, 'user');
+      inputEl.value = '';
+      setStatus('Grok is thinking...', '');
+      try {
+        const response = await sendToGrok(text);
+        addMessage(response, 'grok');
+        setStatus('Online', 'online');
+      } catch (e) {
+        addMessage('Sorry, I couldn\'t reach Grok. Check your connection.', 'grok');
+        setStatus('Offline', 'offline');
+      }
+    }
+
+    sendBtn.addEventListener('click', handleSend);
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleSend();
+    });
+
+    // Check online status
+    if (navigator.onLine) {
+      setStatus('Online', 'online');
+    } else {
+      setStatus('Offline - no connection', 'offline');
+    }
+    window.addEventListener('online', () => setStatus('Online', 'online'));
+    window.addEventListener('offline', () => setStatus('Offline', 'offline'));
+  </script>
+</body>
+</html>
